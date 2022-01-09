@@ -2,16 +2,10 @@
   import type { Writable } from 'svelte/store';
   import { writable } from 'svelte/store';
   import Window from '../molecules/window/index.svelte';
-
-  export interface ScreenMeta {
-    height?: number;
-    width?: number;
-    focused?: EventTarget;
-  }
+  import type { ScreenMeta } from '../types';
 </script>
 
 <script lang="ts">
-
   const screenMeta: Writable<ScreenMeta> = writable();
 
   function resizeObserver(el: HTMLElement) {
@@ -35,8 +29,9 @@
 </script>
 
 <div use:resizeObserver>
-  <Window screenMeta={$screenMeta} on:mousedown={setFocus} />
-  <Window screenMeta={$screenMeta} on:mousedown={setFocus} />
+  {#if $screenMeta}
+    <Window screenMeta={$screenMeta} on:mousedown={setFocus} />
+  {/if}
 </div>
 
 <style>

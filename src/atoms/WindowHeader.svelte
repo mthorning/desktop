@@ -7,12 +7,8 @@
 </script>
 
 <div class:focused={hasFocus}
-    on:touchstart
-    on:touchend
-    on:touchmove
-    on:mousedown
-    on:mouseup
-    on:mousemove
+    on:mouseenter
+    on:mouseleave
   >
   <h1>{title}</h1>
   <nav>

@@ -1,44 +1,96 @@
 <script context="module" lang="ts">
-  import type { ScreenMeta } from '../routes/index.svelte';
   import { interpret } from 'xstate';
-  import { machine } from './machine';
+  import machine from './machine';
+  import type { ScreenMeta } from '../../types';
 </script>
 
 <script lang="ts">
+  import { assign } from 'xstate';
   import Header from '../../atoms/WindowHeader.svelte';
-
-  const windowService = interpret(machine).start();
-
-  // isn't showing 'resizing' when it should
-  $: console.log($windowService.value)
 
   export let width = 500;
   export let height = 500;
   export let screenMeta: ScreenMeta;
+
+  let headerEl: HTMLElement;
   let el: HTMLElement;
-  $: hasFocus = el?.contains(screenMeta?.focused as Node);
 
-  // For resizing
-  let isResizing = false;
-  let offsetX: number;
-  let offsetY: number;
-  let resizeArea = 10;
-  $: nResize = offsetY > 0 && offsetY < resizeArea;
-  $: sResize = offsetY < height && offsetY > height - resizeArea;
-  $: wResize = offsetX > 0 && offsetX < resizeArea;
-  $: eResize = offsetX < width && offsetX > width - resizeArea;
-
-  // For window moving/focusing
-  let isMoving = false;
-  let initial = {
+  const invert = (n: number, dimension: string): number => screenMeta[dimension] - n;
+  let initialPosition = {
     top: 0,
     left: 0,
-    right: 0,
-    bottom: 0
+    right: invert(width, 'width'),
+    bottom: invert(height, 'height')
   };
-  let current = { ...initial };
 
-  function dragStart(e: TouchEvent | MouseEvent) {
+  const windowService = interpret(
+    machine
+      .withContext({
+        currentPosition: initialPosition,
+        top: 0,
+        left: 0,
+        bottom: initialPosition.bottom,
+        right: initialPosition.right,
+        height,
+        width,
+        resizeGrabArea: 10
+      })
+      .withConfig({
+        actions: {
+          moveWindow: assign((context, event) => {
+            const left = event.clientX - context.currentPosition.left;
+            const right = invert(left + context.width, 'width');
+
+            const top = event.clientY - context.currentPosition.top;
+            const bottom = invert(top + context.height, 'height');
+
+            return {
+              ...context,
+              ...(left >= 0 && left + context.width <= screenMeta.width ? { left, right } : {}),
+              ...(top >= 0 && top + context.height <= screenMeta.height ? { top, bottom } : {})
+            };
+          }),
+          resizeWindow: assign((context, event) => {
+            let top: number, left: number, right: number, bottom;
+            switch (context.cursorClass) {
+              case 'n-resize':
+                top = event.clientY - context.currentPosition.top;
+                break;
+              case 'w-resize':
+                left = event.clientX - context.currentPosition.left;
+                break;
+              case 'e-resize':
+                right = invert(event.clientX, 'width');
+                break;
+              case 's-resize':
+                bottom = invert(event.clientY, 'height');
+                break;
+            }
+
+            return {
+              top,
+              left,
+              bottom,
+              right,
+              width: el.clientWidth,
+              height: el.clientHeight
+            };
+          })
+        },
+        guards: {
+          isOverHeader: (_context, event) => headerEl.contains(event.target)
+        }
+      })
+  ).start();
+  $: console.log($windowService.value, $windowService.context);
+
+  $: {
+    if (el?.contains(screenMeta?.focused as Node)) {
+      windowService.send('IS_FOCUSED');
+    }
+  }
+
+  /* function dragStart(e: TouchEvent | MouseEvent) {
     if (e instanceof TouchEvent) {
       initial.left = e.touches[0].clientX - current.left;
       initial.top = e.touches[0].clientY - current.top;
@@ -46,80 +98,46 @@
       initial.left = e.clientX - current.left;
       initial.top = e.clientY - current.top;
     }
-    windowService.send('MOVE')
-    isMoving = true;
-  }
+  } */
 
-  function dragEnd() {
+  /* function dragEnd() {
     initial.top = current.top;
     initial.left = current.left;
-    isMoving = false;
-    windowService.send('STOP_MOVING')
-  }
+  } */
 
-  const setWithinBounds =
-    (min: number, max: number) =>
-    (dimension: number): number => {
-      if (dimension < min) return min;
-      if (dimension > max) return max;
-      return dimension;
-    };
-
-  $: setWithinHeight = setWithinBounds(0, screenMeta?.height - height);
-  $: setWithinWidth = setWithinBounds(0, screenMeta?.width - width);
-
-  function drag(e: TouchEvent | MouseEvent) {
+  /* function drag(e: TouchEvent | MouseEvent) {
     e.preventDefault();
     if (e instanceof TouchEvent) {
-      if (isMoving) {
-        current.left = setWithinWidth(e.touches[0].clientX - initial.left);
-        current.top = setWithinHeight(e.touches[0].clientY - initial.top);
-      }
+      current.left = setWithinWidth(e.touches[0].clientX - initial.left);
+      current.top = setWithinHeight(e.touches[0].clientY - initial.top);
     } else {
-      if (isResizing) {
-        if (nResize) {
-          current.top = setWithinHeight(e.clientY - initial.top);
-        }
-      } else if (isMoving) {
-        current.left = setWithinWidth(e.clientX - initial.left);
-        current.top = setWithinHeight(e.clientY - initial.top);
+      if ($windowService.matches('focused.resizing')) {
+      } else if ($windowService.matches('focused.moving')) {
       }
     }
-  }
+  } */
 </script>
 
 <svelte:body
-  on:touchend={dragEnd}
-  on:mouseup={dragEnd}
-  on:mousemove={drag}
-  on:touchmove={drag}
-  on:pointerleave={dragEnd} />
+  on:mousedown={windowService.send}
+  on:mouseup={windowService.send}
+  on:mousemove={windowService.send}
+/>
 <div
-  class:n-resize={nResize}
-  class:e-resize={eResize}
-  class:s-resize={sResize}
-  class:w-resize={wResize}
   on:mousedown
-  on:mousedown={() => {
-    if(isResizing = nResize || eResize || sResize || wResize) {
-windowService.send('RESIZING')
-  }
-  }}
-  on:mouseup={() => windowService.send('STOP_RESIZING')}
-  on:mousemove={({ offsetX: x, offsetY: y }) => {
-    offsetX = x;
-    offsetY = y;
-  }}
   bind:this={el}
-  class:focused={hasFocus}
+  class:focused={$windowService.matches('focused')}
   style={`
-    left: ${current.left}px; 
-    top: ${current.top}px;
-    width: ${width}px;
-    height: ${height}px;
+    left: ${$windowService.context.left}px; 
+    right: ${$windowService.context.right}px; 
+    bottom: ${$windowService.context.bottom}px;
+    top: ${$windowService.context.top}px;
+    cursor: ${$windowService.context.cursorClass ?? 'default'};
   `}
 >
-  <Header {hasFocus} on:touchstart={dragStart} on:mousedown={dragStart} />
+  <span bind:this={headerEl}>
+    <Header hasFocus={$windowService.matches('focused')} on:mousedown={windowService.send} />
+  </span>
 </div>
 
 <style>
@@ -131,29 +149,5 @@ windowService.send('RESIZING')
   }
   .focused {
     z-index: 999;
-  }
-  .n-resize {
-    cursor: n-resize;
-  }
-  .e-resize {
-    cursor: e-resize;
-  }
-  .s-resize {
-    cursor: s-resize;
-  }
-  .w-resize {
-    cursor: w-resize;
-  }
-  .n-resize.e-resize {
-    cursor: ne-resize;
-  }
-  .s-resize.e-resize {
-    cursor: se-resize;
-  }
-  .s-resize.w-resize {
-    cursor: sw-resize;
-  }
-  .n-resize.w-resize {
-    cursor: nw-resize;
   }
 </style>
