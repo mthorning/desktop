@@ -60,6 +60,7 @@ export default createMachine<Context>(
           moving: {
             on: {
               mouseup: 'idle',
+              mouseleave: 'idle',
               mousemove: 'moveWindow'
             }
           },

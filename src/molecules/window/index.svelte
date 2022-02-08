@@ -22,6 +22,7 @@
     right: invert(width, 'width'),
     bottom: invert(height, 'height')
   };
+  let offset = { x: 0, y: 0 }
 
   const windowService = interpret(
     machine
@@ -38,10 +39,10 @@
       .withConfig({
         actions: {
           moveWindow: assign((context, event) => {
-            const left = event.clientX - context.currentPosition.left;
+            const left = event.clientX + context.currentPosition.left - offset.x;
             const right = invert(left + context.width, 'width');
 
-            const top = event.clientY - context.currentPosition.top;
+            const top = event.clientY - context.currentPosition.top - offset.y;
             const bottom = invert(top + context.height, 'height');
 
             return {
@@ -82,7 +83,7 @@
         }
       })
   ).start();
-  $: console.log($windowService.value, $windowService.context);
+  /* $: console.log($windowService.value, $windowService.context); */
 
   $: {
     if (el?.contains(screenMeta?.focused as Node)) {
@@ -122,9 +123,11 @@
   on:mousedown={windowService.send}
   on:mouseup={windowService.send}
   on:mousemove={windowService.send}
+  on:mouseleave={windowService.send}
 />
 <div
   on:mousedown
+  on:mousedown={({ offsetX: x, offsetY: y }) => { offset = { x, y }}}
   bind:this={el}
   class:focused={$windowService.matches('focused')}
   style={`
